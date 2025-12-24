@@ -127,8 +127,6 @@ async def redis_listener(application: Application) -> None:
     logger.info("Starting Redis listener...")
     
     while True:
-        r = None
-        pubsub = None
         try:
             # Connect to Redis
             r = redis.Redis(
@@ -143,78 +141,55 @@ async def redis_listener(application: Application) -> None:
             await pubsub.subscribe(REDIS_CHANNEL)
             logger.info(f"Subscribed to Redis channel: {REDIS_CHANNEL}")
             
-            # Listen for messages
-            try:
-                async for message in pubsub.listen():
-                    if message['type'] == 'message':
-                        try:
-                            # Parse the JSON data
-                            data = json.loads(message['data'])
-                            logger.info(f"Received arbitrage opportunity: {data}")
-                            
-                            # Check if this opportunity is the same as the last one
-                            if data == last_opportunity:
-                                logger.info("Duplicate opportunity detected, skipping...")
-                                continue
-                            
-                            # Update the last opportunity
-                            last_opportunity.clear()
-                            last_opportunity.update(data)
-                            
-                            # Format the message
-                            formatted_message = await format_arbitrage_message(data)
-                            
-                            # Send to all subscribed chats
-                            for chat_id in subscribed_chats.copy():
-                                try:
-                                    await application.bot.send_message(
-                                        chat_id=chat_id,
-                                        text=formatted_message,
-                                        parse_mode='Markdown'
-                                    )
-                                    logger.info(f"Sent message to chat {chat_id}")
-                                except Exception as e:
-                                    logger.error(f"Error sending message to chat {chat_id}: {e}")
-                                    # Remove chat if it's blocked or deleted
-                                    if "bot was blocked" in str(e).lower() or "chat not found" in str(e).lower():
-                                        subscribed_chats.discard(chat_id)
-                                        logger.info(f"Removed chat {chat_id} from subscribers")
+            # Listen for messages indefinitely
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    try:
+                        # Parse the JSON data
+                        data = json.loads(message['data'])
+                        logger.info(f"Received arbitrage opportunity: {data}")
                         
-                        except json.JSONDecodeError as e:
-                            logger.error(f"Error decoding JSON: {e}")
-                        except Exception as e:
-                            logger.error(f"Error processing message: {e}")
-            except asyncio.CancelledError:
-                logger.info("Redis listener task cancelled")
-                raise
+                        # Check if this opportunity is the same as the last one
+                        if data == last_opportunity:
+                            logger.info("Duplicate opportunity detected, skipping...")
+                            continue
+                        
+                        # Update the last opportunity
+                        last_opportunity.clear()
+                        last_opportunity.update(data)
+                        
+                        # Format the message
+                        formatted_message = await format_arbitrage_message(data)
+                        
+                        # Send to all subscribed chats
+                        for chat_id in subscribed_chats.copy():
+                            try:
+                                await application.bot.send_message(
+                                    chat_id=chat_id,
+                                    text=formatted_message,
+                                    parse_mode='Markdown'
+                                )
+                                logger.info(f"Sent message to chat {chat_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending message to chat {chat_id}: {e}")
+                                # Remove chat if it's blocked or deleted
+                                if "bot was blocked" in str(e).lower() or "chat not found" in str(e).lower():
+                                    subscribed_chats.discard(chat_id)
+                                    logger.info(f"Removed chat {chat_id} from subscribers")
+                    
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Error decoding JSON: {e}")
+                    except Exception as e:
+                        logger.error(f"Error processing message: {e}")
             
         except redis.ConnectionError as e:
             logger.error(f"Redis connection error: {e}")
             logger.info("Retrying in 5 seconds...")
             await asyncio.sleep(5)
-        except asyncio.CancelledError:
-            logger.info("Redis listener shutting down...")
-            break
         except Exception as e:
             logger.error(f"Unexpected error in Redis listener: {e}")
             logger.info("Retrying in 5 seconds...")
             await asyncio.sleep(5)
-        finally:
-            # Clean up resources properly
-            if pubsub is not None:
-                try:
-                    await pubsub.unsubscribe(REDIS_CHANNEL)
-                except Exception as e:
-                    logger.debug(f"Error unsubscribing: {e}")
-                try:
-                    await pubsub.close()
-                except Exception as e:
-                    logger.debug(f"Error closing pubsub: {e}")
-            if r is not None:
-                try:
-                    await r.close()
-                except Exception as e:
-                    logger.debug(f"Error closing redis connection: {e}")
 
 
 async def post_init(application: Application) -> None:
