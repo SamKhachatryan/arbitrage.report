@@ -119,7 +119,7 @@ async def format_arbitrage_message(data: dict) -> str:
         return message
     except Exception as e:
         logger.error(f"Error formatting message: {e}")
-        return f"🚨 *New Opportunity*\n\n```json\n{json.dumps(data, indent=2)}\n```"
+        return f"🚨 *Opportunity*\n\n```json\n{json.dumps(data, indent=2)}\n```"
 
 
 async def redis_listener(application: Application) -> None:
