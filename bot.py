@@ -98,7 +98,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def format_arbitrage_message(data: dict) -> str:
     """Format the arbitrage opportunity data into a readable message"""
     try:
-        message = "🚨 *Arbitrage Opportunity Detected!*\n\n"
+        message = "🚨 Arbitrage Opportunity Detected!*\n\n"
         
         # Add all key-value pairs from the JSON
         for key, value in data.items():
