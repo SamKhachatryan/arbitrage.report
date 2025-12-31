@@ -1,14 +1,17 @@
-# Arbitrage Opportunities Telegram Bot
+# Arbitrage Trade Alerts Telegram Bot
 
-A Python Telegram bot that listens to Redis pub/sub for arbitrage opportunities and pushes notifications to subscribed users.
+A Python Telegram bot that listens to Redis pub/sub for arbitrage trade executions and summaries, pushing real-time notifications to subscribed users.
 
 ## Features
 
-- 📡 Listens to Redis pub/sub channel for arbitrage opportunities
+- 📡 Listens to multiple Redis pub/sub channels for trade data
+- ⚡ Real-time trade execution alerts
+- 📊 Trade summary notifications
 - 🤖 Telegram bot interface for user subscriptions
-- 📢 Broadcasts opportunities to all subscribed users
+- 📢 Broadcasts trades to all subscribed users
 - 🔄 Automatic reconnection on Redis connection loss
 - ✅ User subscription management
+- 🚫 Duplicate message filtering
 
 ## Prerequisites
 
@@ -56,17 +59,23 @@ python bot.py
 
 ### Telegram Bot Commands
 
-- `/start` - Subscribe to arbitrage alerts
+- `/start` - Subscribe to trade alerts
 - `/stop` - Unsubscribe from alerts
 - `/status` - Check subscription status
 
-### Publishing Arbitrage Opportunities to Redis
+### Publishing Arbitrage Trades to Redis
 
-To test or publish arbitrage opportunities, use Redis pub/sub:
+The bot subscribes to two Redis channels:
+- `arbitrage-trade-execution` - Real-time trade executions
+- `arbitrage-trade-summary` - Trade summaries
 
 **Using redis-cli:**
 ```bash
-redis-cli PUBLISH arbitrage-opportunity '{"exchange_buy":"Binance","exchange_sell":"Coinbase","symbol":"BTC/USDT","buy_price":50000,"sell_price":50500,"profit_usd":500,"profit_percentage":1.0}'
+# Publish trade execution
+redis-cli PUBLISH arbitrage-trade-execution '{"exchange":"binance","pair":"btc-usdt","side":"spot_long","action":"open","amount":100.5,"price":43250.75,"spread_pct":1.25,"timestamp":"2025-12-27T14:30:45Z"}'
+
+# Publish trade summary
+redis-cli PUBLISH arbitrage-trade-summary '{"exchange":"binance","pair":"btc-usdt","side":"spot_long","action":"open","amount":100.5,"price":43250.75,"spread_pct":1.25,"timestamp":"2025-12-27T14:30:45Z"}'
 ```
 
 **Using Python:**
@@ -75,16 +84,19 @@ import redis
 import json
 
 r = redis.Redis(host='localhost', port=6379, db=0)
-opportunity = {
-    "exchange_buy": "Binance",
-    "exchange_sell": "Coinbase",
-    "symbol": "BTC/USDT",
-    "buy_price": 50000,
-    "sell_price": 50500,
-    "profit_usd": 500,
-    "profit_percentage": 1.0
+
+# Trade execution
+trade = {
+    "exchange": "binance",
+    "pair": "btc-usdt",
+    "side": "spot_long",
+    "action": "open",
+    "amount": 100.5,
+    "price": 43250.75,
+    "spread_pct": 1.25,
+    "timestamp": "2025-12-27T14:30:45Z"
 }
-r.publish('arbitrage-opportunity', json.dumps(opportunity))
+r.publish('arbitrage-trade-execution', json.dumps(trade))
 ```
 
 ## Configuration
@@ -113,24 +125,53 @@ arbitrage.report/
 ## How It Works
 
 1. The bot connects to your local Redis instance
-2. It subscribes to the `arbitrage-opportunity` channel
+2. It subscribes to two channels:
+   - `arbitrage-trade-execution` - for real-time trade executions
+   - `arbitrage-trade-summary` - for trade summaries
 3. Users can subscribe to the bot using `/start` command
-4. When an arbitrage opportunity is published to Redis, the bot:
+4. When a trade is published to Redis, the bot:
    - Receives the JSON data
    - Formats it into a readable message
    - Sends it to all subscribed users
+   - Filters out duplicate messages
 
 ## Error Handling
 
 - Automatic reconnection to Redis on connection loss
 - Removes blocked/deleted chats from subscriber list
+- Duplicate message filtering per channel
 - Logs all errors for debugging
 
 ## Example Message Format
 
-When an arbitrage opportunity is detected, users receive:
+When a trade execution is detected, users receive:
 
 ```
+⚡ Trade Execution
+
+Exchange: BINANCE
+Pair: BTC-USDT
+Side: Spot Long
+Action: OPEN
+Amount: 100.50
+Price: $43250.75
+Spread: 1.25%
+Time: 2025-12-27T14:30:45Z
+```
+
+When a trade summary is detected, users receive:
+
+```
+📊 Trade Summary
+
+Exchange: BINANCE
+Pair: BTC-USDT
+Side: Spot Long
+Action: OPEN
+Amount: 100.50
+Price: $43250.75
+Spread: 1.25%
+Time: 2025-12-27T14:30:45Z
 🚨 Arbitrage Opportunity Detected!
 
 Exchange Buy: Binance

@@ -1,13 +1,13 @@
 """
-Telegram Bot for Arbitrage Opportunities
-Listens to Redis pub/sub for arbitrage opportunities and sends them to subscribed users.
+Telegram Bot for Arbitrage Trades
+Listens to Redis pub/sub for arbitrage trade executions and summaries and sends them to subscribed users.
 """
 
 import json
 import logging
 import asyncio
 import os
-from typing import Set
+from typing import Set, Dict
 from dotenv import load_dotenv
 import redis.asyncio as redis
 from telegram import Update
@@ -30,14 +30,19 @@ logger = logging.getLogger(__name__)
 # Store subscribed chat IDs
 subscribed_chats: Set[int] = set()
 
-# Store the last opportunity to avoid duplicates
-last_opportunity: dict = {}
+# Store the last messages to avoid duplicates (per channel)
+last_messages: Dict[str, dict] = {
+    'arbitrage-trade-execution': {},
+    'arbitrage-trade-summary': {}
+}
 
 # Redis configuration
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_CHANNEL = os.getenv('REDIS_CHANNEL', 'arbitrage-opportunity')
+
+# Redis channels to subscribe to
+REDIS_CHANNELS = ['arbitrage-trade-execution', 'arbitrage-trade-summary']
 
 # Telegram Bot Token
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -51,14 +56,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     subscribed_chats.add(chat_id)
     
     await update.message.reply_text(
-        '🤖 Welcome to Arbitrage Opportunities Bot!\n\n'
-        'You will now receive arbitrage opportunities as they are detected.\n\n'
+        '🤖 Welcome to Arbitrage Trade Alerts Bot!\n\n'
+        'You will now receive arbitrage trade executions and summaries in real-time.\n\n'
         'Commands:\n'
-        '/start - Subscribe to arbitrage alerts\n'
+        '/start - Subscribe to trade alerts\n'
         '/stop - Unsubscribe from alerts\n'
         '/status - Check subscription status'
     )
-    logger.info(f"Chat {chat_id} subscribed to arbitrage alerts")
+    logger.info(f"Chat {chat_id} subscribed to trade alerts")
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -95,35 +100,46 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
 
-async def format_arbitrage_message(data: dict) -> str:
-    """Format the arbitrage opportunity data into a readable message"""
+async def format_trade_message(data: dict, channel: str) -> str:
+    """Format the trade data into a readable message"""
     try:
-        message = "🚨 *Opportunity Detected!*\n\n"
+        # Determine message type
+        if 'execution' in channel:
+            icon = "⚡"
+            title = "*Trade Execution*"
+        else:
+            icon = "📊"
+            title = "*Trade Summary*"
         
-        # Add all key-value pairs from the JSON
-        for key, value in data.items():
-            # Format the key to be more readable
-            formatted_key = key.replace('_', ' ').title()
-            
-            # Handle different value types
-            if isinstance(value, (int, float)):
-                if 'price' in key.lower() or 'profit' in key.lower():
-                    message += f"*{formatted_key}:* ${value:.2f}\n"
-                elif 'percentage' in key.lower() or 'percent' in key.lower():
-                    message += f"*{formatted_key}:* {value:.2f}%\n"
-                else:
-                    message += f"*{formatted_key}:* {value}\n"
-            else:
-                message += f"*{formatted_key}:* {value}\n"
+        message = f"{icon} {title}\n\n"
+        
+        # Format specific fields
+        exchange = data.get('exchange', 'N/A').upper()
+        pair = data.get('pair', 'N/A').upper()
+        side = data.get('side', 'N/A').replace('_', ' ').title()
+        action = data.get('action', 'N/A').upper()
+        amount = data.get('amount', 0)
+        price = data.get('price', 0)
+        spread = data.get('spread_pct', 0)
+        timestamp = data.get('timestamp', 'N/A')
+        
+        message += f"*Exchange:* {exchange}\n"
+        message += f"*Pair:* {pair}\n"
+        message += f"*Side:* {side}\n"
+        message += f"*Action:* {action}\n"
+        message += f"*Amount:* {amount:.2f}\n"
+        message += f"*Price:* ${price:.2f}\n"
+        message += f"*Spread:* {spread:.2f}%\n"
+        message += f"*Time:* {timestamp}\n"
         
         return message
     except Exception as e:
         logger.error(f"Error formatting message: {e}")
-        return f"🚨 *New Opportunity*\n\n```json\n{json.dumps(data, indent=2)}\n```"
+        return f"{icon} *New Trade*\n\n```json\n{json.dumps(data, indent=2)}\n```"
 
 
 async def redis_listener(application: Application) -> None:
-    """Listen to Redis pub/sub channel for arbitrage opportunities"""
+    """Listen to Redis pub/sub channels for arbitrage trades"""
     logger.info("Starting Redis listener...")
     
     while True:
@@ -136,10 +152,10 @@ async def redis_listener(application: Application) -> None:
                 decode_responses=True
             )
             
-            # Subscribe to the channel
+            # Subscribe to both channels
             pubsub = r.pubsub()
-            await pubsub.subscribe(REDIS_CHANNEL)
-            logger.info(f"Subscribed to Redis channel: {REDIS_CHANNEL}")
+            await pubsub.subscribe(*REDIS_CHANNELS)
+            logger.info(f"Subscribed to Redis channels: {', '.join(REDIS_CHANNELS)}")
             
             # Listen for messages using get_message instead of async iteration
             while True:
@@ -148,21 +164,22 @@ async def redis_listener(application: Application) -> None:
                     
                     if message is not None and message['type'] == 'message':
                         try:
+                            channel = message['channel']
+                            
                             # Parse the JSON data
                             data = json.loads(message['data'])
-                            logger.info(f"Received arbitrage opportunity: {data}")
+                            logger.info(f"Received trade from {channel}: {data}")
                             
-                            # Check if this opportunity is the same as the last one
-                            if data == last_opportunity:
-                                logger.info("Duplicate opportunity detected, skipping...")
+                            # Check if this message is the same as the last one for this channel
+                            if data == last_messages.get(channel, {}):
+                                logger.info(f"Duplicate message on {channel}, skipping...")
                                 continue
                             
-                            # Update the last opportunity
-                            last_opportunity.clear()
-                            last_opportunity.update(data)
+                            # Update the last message for this channel
+                            last_messages[channel] = data.copy()
                             
                             # Format the message
-                            formatted_message = await format_arbitrage_message(data)
+                            formatted_message = await format_trade_message(data, channel)
                             
                             # Send to all subscribed chats
                             for chat_id in subscribed_chats.copy():
@@ -172,7 +189,7 @@ async def redis_listener(application: Application) -> None:
                                         text=formatted_message,
                                         parse_mode='Markdown'
                                     )
-                                    logger.info(f"Sent message to chat {chat_id}")
+                                    logger.info(f"Sent {channel} message to chat {chat_id}")
                                 except Exception as e:
                                     logger.error(f"Error sending message to chat {chat_id}: {e}")
                                     # Remove chat if it's blocked or deleted

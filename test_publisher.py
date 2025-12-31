@@ -1,5 +1,5 @@
 """
-Test script to publish arbitrage opportunities to Redis
+Test script to publish arbitrage trades to Redis
 Run this to test the Telegram bot
 """
 
@@ -10,53 +10,68 @@ import time
 # Connect to Redis
 r = redis.Redis(host='localhost', port=6379, db=0)
 
-# Test arbitrage opportunity data
-test_opportunities = [
+# Test trade execution data
+test_executions = [
     {
-        "exchange_buy": "Binance",
-        "exchange_sell": "Coinbase",
-        "symbol": "BTC/USDT",
-        "buy_price": 50000.00,
-        "sell_price": 50500.00,
-        "profit_usd": 500.00,
-        "profit_percentage": 1.0,
-        "timestamp": "2025-12-25 10:30:00"
+        "exchange": "binance",
+        "pair": "btc-usdt",
+        "side": "spot_long",
+        "action": "open",
+        "amount": 100.5,
+        "price": 43250.75,
+        "spread_pct": 1.25,
+        "timestamp": "2025-12-27T14:30:45Z"
     },
     {
-        "exchange_buy": "Kraken",
-        "exchange_sell": "Bitfinex",
-        "symbol": "ETH/USDT",
-        "buy_price": 3000.00,
-        "sell_price": 3045.00,
-        "profit_usd": 45.00,
-        "profit_percentage": 1.5,
-        "timestamp": "2025-12-25 10:31:00"
-    },
-    {
-        "exchange_buy": "Bybit",
-        "exchange_sell": "OKX",
-        "symbol": "SOL/USDT",
-        "buy_price": 100.00,
-        "sell_price": 102.50,
-        "profit_usd": 2.50,
-        "profit_percentage": 2.5,
-        "timestamp": "2025-12-25 10:32:00"
+        "exchange": "coinbase",
+        "pair": "eth-usdt",
+        "side": "spot_short",
+        "action": "close",
+        "amount": 50.25,
+        "price": 2250.50,
+        "spread_pct": 0.85,
+        "timestamp": "2025-12-27T14:31:15Z"
     }
 ]
 
-def publish_opportunity(opportunity):
-    """Publish an arbitrage opportunity to Redis"""
+# Test trade summary data
+test_summaries = [
+    {
+        "exchange": "binance",
+        "pair": "btc-usdt",
+        "side": "spot_long",
+        "action": "open",
+        "amount": 100.5,
+        "price": 43250.75,
+        "spread_pct": 1.25,
+        "timestamp": "2025-12-27T14:30:45Z"
+    },
+    {
+        "exchange": "kraken",
+        "pair": "sol-usdt",
+        "side": "futures_long",
+        "action": "open",
+        "amount": 200.0,
+        "price": 95.30,
+        "spread_pct": 2.15,
+        "timestamp": "2025-12-27T14:32:00Z"
+    }
+]
+
+def publish_trade(channel, trade_data):
+    """Publish a trade to Redis"""
     try:
-        # Publish to the arbitrage-opportunity channel
-        r.publish('arbitrage-opportunity', json.dumps(opportunity))
-        print(f"✅ Published: {opportunity['symbol']} - {opportunity['exchange_buy']} → {opportunity['exchange_sell']}")
-        print(f"   Profit: ${opportunity['profit_usd']} ({opportunity['profit_percentage']}%)")
+        # Publish to the specified channel
+        r.publish(channel, json.dumps(trade_data))
+        print(f"✅ Published to {channel}:")
+        print(f"   {trade_data['exchange'].upper()} | {trade_data['pair'].upper()} | {trade_data['action'].upper()}")
+        print(f"   Amount: {trade_data['amount']} @ ${trade_data['price']} | Spread: {trade_data['spread_pct']}%")
     except Exception as e:
         print(f"❌ Error publishing: {e}")
 
 def main():
-    print("🧪 Redis Arbitrage Opportunity Test Publisher")
-    print("=" * 50)
+    print("🧪 Redis Arbitrage Trade Test Publisher")
+    print("=" * 60)
     
     # Check Redis connection
     try:
@@ -66,20 +81,27 @@ def main():
         print("❌ Cannot connect to Redis. Make sure Redis is running on localhost:6379")
         return
     
-    print("\nPublishing test arbitrage opportunities...")
-    print("=" * 50)
+    print("\nPublishing test trades...")
+    print("=" * 60)
     
-    # Publish each test opportunity with a delay
-    for i, opportunity in enumerate(test_opportunities, 1):
-        print(f"\n[{i}/{len(test_opportunities)}]")
-        publish_opportunity(opportunity)
-        
-        if i < len(test_opportunities):
-            print("\nWaiting 3 seconds before next opportunity...")
-            time.sleep(3)
+    # Publish trade executions
+    print("\n📤 TRADE EXECUTIONS:")
+    print("-" * 60)
+    for i, execution in enumerate(test_executions, 1):
+        print(f"\n[Execution {i}/{len(test_executions)}]")
+        publish_trade('arbitrage-trade-execution', execution)
+        time.sleep(2)
     
-    print("\n" + "=" * 50)
-    print("✅ All test opportunities published!")
+    # Publish trade summaries
+    print("\n\n📊 TRADE SUMMARIES:")
+    print("-" * 60)
+    for i, summary in enumerate(test_summaries, 1):
+        print(f"\n[Summary {i}/{len(test_summaries)}]")
+        publish_trade('arbitrage-trade-summary', summary)
+        time.sleep(2)
+    
+    print("\n" + "=" * 60)
+    print("✅ All test trades published!")
     print("\nCheck your Telegram bot for the messages.")
 
 if __name__ == '__main__':
