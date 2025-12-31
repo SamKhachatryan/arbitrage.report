@@ -107,35 +107,84 @@ async def format_trade_message(data: dict, channel: str) -> str:
         if 'execution' in channel:
             icon = "⚡"
             title = "*Trade Execution*"
+            
+            # Format trade execution
+            exchange = data.get('exchange', 'N/A').upper()
+            pair = data.get('pair', 'N/A').upper()
+            side = data.get('side', 'N/A').replace('_', ' ').title()
+            action = data.get('action', 'N/A').upper()
+            amount = data.get('amount', 0)
+            price = data.get('price', 0)
+            spread = data.get('spread_pct', 0)
+            timestamp = data.get('timestamp', 'N/A')
+            
+            message = f"{icon} {title}\n\n"
+            message += f"*Exchange:* {exchange}\n"
+            message += f"*Pair:* {pair}\n"
+            message += f"*Side:* {side}\n"
+            message += f"*Action:* {action}\n"
+            message += f"*Amount:* {amount:.2f}\n"
+            message += f"*Price:* ${price:.2f}\n"
+            message += f"*Spread:* {spread:.2f}%\n"
+            message += f"*Time:* {timestamp}\n"
+            
         else:
+            # Trade Summary format (from Go publisher with snake_case json tags)
             icon = "📊"
             title = "*Trade Summary*"
-        
-        message = f"{icon} {title}\n\n"
-        
-        # Format specific fields
-        exchange = data.get('exchange', 'N/A').upper()
-        pair = data.get('pair', 'N/A').upper()
-        side = data.get('side', 'N/A').replace('_', ' ').title()
-        action = data.get('action', 'N/A').upper()
-        amount = data.get('amount', 0)
-        price = data.get('price', 0)
-        spread = data.get('spread_pct', 0)
-        timestamp = data.get('timestamp', 'N/A')
-        
-        message += f"*Exchange:* {exchange}\n"
-        message += f"*Pair:* {pair}\n"
-        message += f"*Side:* {side}\n"
-        message += f"*Action:* {action}\n"
-        message += f"*Amount:* {amount:.2f}\n"
-        message += f"*Price:* ${price:.2f}\n"
-        message += f"*Spread:* {spread:.2f}%\n"
-        message += f"*Time:* {timestamp}\n"
+            
+            pair = data.get('pair', 'N/A').upper()
+            spot_exchange = data.get('spot_exchange', 'N/A').upper()
+            futures_exchange = data.get('futures_exchange', 'N/A').upper()
+            entry_spread = data.get('entry_spread', 0)
+            exit_spread = data.get('exit_spread', 0)
+            spot_profit = data.get('spot_profit', 0)
+            futures_profit = data.get('futures_profit', 0)
+            total_profit = data.get('total_profit', 0)
+            amount = data.get('amount', 0)
+            duration = data.get('duration', 'N/A')
+            open_time = data.get('open_time', 'N/A')
+            close_time = data.get('close_time', 'N/A')
+            
+            message = f"{icon} {title}\n\n"
+            message += f"*Pair:* {pair}\n"
+            message += f"*Spot Exchange:* {spot_exchange}\n"
+            message += f"*Futures Exchange:* {futures_exchange}\n"
+            message += f"*Amount:* ${amount:.2f}\n\n"
+            
+            message += f"*Entry Spread:* {entry_spread:.4f}%\n"
+            message += f"*Exit Spread:* {exit_spread:.4f}%\n\n"
+            
+            message += f"*Spot Profit:* ${spot_profit:.2f}\n"
+            message += f"*Futures Profit:* ${futures_profit:.2f}\n"
+            message += f"*Total Profit:* ${total_profit:.2f}\n\n"
+            
+            message += f"*Duration:* {duration}\n"
+            message += f"*Opened:* {open_time}\n"
+            message += f"*Closed:* {close_time}\n"
+            
+            message = f"{icon} {title}\n\n"
+            message += f"*Pair:* {pair}\n"
+            message += f"*Spot Exchange:* {spot_exchange}\n"
+            message += f"*Futures Exchange:* {futures_exchange}\n"
+            message += f"*Amount:* ${amount:.2f}\n\n"
+            
+            message += f"*Entry Spread:* {entry_spread:.4f}%\n"
+            message += f"*Exit Spread:* {exit_spread:.4f}%\n\n"
+            
+            message += f"*Spot Profit:* ${spot_profit:.2f}\n"
+            message += f"*Futures Profit:* ${futures_profit:.2f}\n"
+            message += f"*Total Profit:* ${total_profit:.2f}\n\n"
+            
+            message += f"*Duration:* {duration}\n"
+            message += f"*Opened:* {open_time}\n"
+            message += f"*Closed:* {close_time}\n"
         
         return message
     except Exception as e:
         logger.error(f"Error formatting message: {e}")
         return f"{icon} *New Trade*\n\n```json\n{json.dumps(data, indent=2)}\n```"
+
 
 
 async def redis_listener(application: Application) -> None:
